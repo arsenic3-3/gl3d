@@ -36,13 +36,17 @@ static const char* VERT = R"(#version 140
 uniform mat4 uMvp;
 out float vShade;
 out float vDepth;
-const vec2 Q[6] = vec2[](vec2(-1,-1), vec2(1,-1), vec2(1,1), vec2(-1,-1), vec2(1,1), vec2(-1,1));
 void main() {
     // Unit cube (-1..1) generated from the vertex id: 6 faces * 6 vertices
     int face = gl_VertexID / 6;
     int axis = face / 2;
     float s  = (face % 2 == 0) ? 1.0 : -1.0;
-    vec2 q   = Q[gl_VertexID % 6];
+    int i    = gl_VertexID % 6;
+    vec2 q;  // quad corners (no const arrays: old Intel drivers reject them)
+    if (i == 0 || i == 3)      q = vec2(-1.0, -1.0);
+    else if (i == 1)           q = vec2( 1.0, -1.0);
+    else if (i == 2 || i == 4) q = vec2( 1.0,  1.0);
+    else                       q = vec2(-1.0,  1.0);
     vec3 p, n;
     if (axis == 0)      { p = vec3(s, q.x, q.y); n = vec3(s, 0.0, 0.0); }
     else if (axis == 1) { p = vec3(q.y, s, q.x); n = vec3(0.0, s, 0.0); }
