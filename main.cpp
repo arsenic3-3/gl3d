@@ -12,7 +12,25 @@
 #include <random>
 #include <vector>
 
-[[noreturn]] static void die(const char* m) { std::fprintf(stderr, "%s\n", m); std::exit(1); }
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+#include <string>
+
+static std::string lastGlfwError;
+[[noreturn]] static void die(const char* m) {
+    std::string msg = m;
+    if (!lastGlfwError.empty()) msg += "\n\nGLFW: " + lastGlfwError;
+    const GLubyte* v = glGetString(GL_VERSION);
+    if (v) msg += std::string("\n\nOpenGL: ") + (const char*)v;
+    std::fprintf(stderr, "%s\n", msg.c_str());
+#ifdef _WIN32
+    MessageBoxA(nullptr, msg.c_str(), "gl3d error", MB_OK | MB_ICONERROR);
+#endif
+    std::exit(1);
+}
 
 static const char* VERT = R"(#version 140
 uniform mat4 uMvp;
@@ -53,7 +71,7 @@ static GLuint compile(GLenum type, const char* src) {
     glShaderSource(s, 1, &src, nullptr);
     glCompileShader(s);
     GLint ok; glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-    if (!ok) { char log[1024]; glGetShaderInfoLog(s, sizeof log, nullptr, log); std::fprintf(stderr, "%s\n", log); die("Shader compile failed"); }
+    if (!ok) { char log[1024]; glGetShaderInfoLog(s, sizeof log, nullptr, log); lastGlfwError = log; die("Shader compile failed"); }
     return s;
 }
 
@@ -102,6 +120,7 @@ static void updateGame(float dt) {
 }
 
 int main() {
+    glfwSetErrorCallback([](int, const char* d) { lastGlfwError = d; });
     if (!glfwInit()) die("glfwInit failed");
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);  // profiles only exist from 3.2, so none requested
@@ -111,7 +130,8 @@ int main() {
     glfwMakeContextCurrent(win);
     glfwSwapInterval(1);
     glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) die("glewInit failed");
+    GLenum ge = glewInit();
+    if (ge != GLEW_OK) { lastGlfwError = (const char*)glewGetErrorString(ge); die("glewInit failed"); }
     std::printf("GPU: %s\n", (const char*)glGetString(GL_RENDERER));
 
     GLuint prog = glCreateProgram();
@@ -119,7 +139,7 @@ int main() {
     glAttachShader(prog, vs); glAttachShader(prog, fs);
     glLinkProgram(prog);
     GLint ok; glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-    if (!ok) die("Program link failed");
+    if (!ok) { char log[1024]; glGetProgramInfoLog(prog, sizeof log, nullptr, log); lastGlfwError = log; die("Program link failed"); }
     glDeleteShader(vs); glDeleteShader(fs);
     GLint locMvp = glGetUniformLocation(prog, "uMvp"), locColor = glGetUniformLocation(prog, "uColor");
 
